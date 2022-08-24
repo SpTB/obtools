@@ -1,0 +1,18 @@
+Package: obtools
+Type: Package
+Title: Functions specific for Observing Bandits project
+Version: 0.1.0
+Authors@R: 
+    person(given = "Wojciech",
+           family = "Zajkowski",
+           role = c("aut", "cre"),
+           email = "traumatictiltexperience@gmail.com",
+           comment = c(ORCID = "0000-0001-6078-1724"))
+Maintainer: Wojciech Zajkowski <traumatictiltexperience@gmail.com>
+Description: Contains functions for simulating, analysing and fitting models for the Observing Bandits project
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    wztools, tibble
+URL: https://github.com/SpTB/obtools
