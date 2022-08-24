@@ -78,7 +78,7 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
                      rnorm(trial_num, pay2, pay2_sd))
   }
 
-  ev = matrix(ev0, trial_num, 2)
+  ev = ev_after = matrix(ev0, trial_num, 2)
 
 
   for (t in 1:trial_num) {
@@ -122,12 +122,22 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
       pe = observed_outcomes[t] - ev[t,observation[t]]
     }
 
+    #update 2 (after)
+    if (choice[t]>-1) {
+      ev_after[t,choice[t]] = ev_after[t,choice[t]] + pe * alpha
+      ev_after[t,reject[t]] = ev_after[t,reject[t]]
+    } else {
+      ev_after[t,observation[t]] = ev_after[t,observation[t]] + pe * alpha_obs
+      ev_after[t,abs(observation[t]-3)] = ev_after[t,abs(observation[t]-3)]
+    }
 
   } # t loop
 
   out = tibble::tibble(
     ev1 = ev[,1],
     ev2 = ev[,2],
+    ev1_after = ev_after[,1],
+    ev2_after = ev_after[,2],
     choice = choice,
     observation = observation,
     outcome = observed_outcomes,
