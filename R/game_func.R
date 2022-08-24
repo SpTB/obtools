@@ -96,8 +96,8 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
     }
     #choose
     did_choose = rbinom(1, 1, (1-p_observe[t]))
+    evt = ev[t,]
     if (did_choose) {
-      evt = ev[t,]
       # #!!!information bonus stuff not implemented
       # freqa = sum(c(observation, choice)==1) #how many times up to this point option A was chosen
       # freqb = sum(c(observation, choice)==2)
@@ -106,8 +106,8 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
       # inf_diff = freqa-freqb
       #TODO: potentially, inf bonus can be scaled by the difference in inf
       #A = -(inf_bonus[t] * inf_diff) #bonus goes to the less chosen option
-      A = 0
-      evt[1] = evt[1] + A #adding the inf bonus (minus values substract bonus from evt[1], which is equivalent to adding the bonus for evt[2])
+      #A = 0
+      #evt[1] = evt[1] + A #adding the inf bonus (minus values substract bonus from evt[1], which is equivalent to adding the bonus for evt[2])
       if (softmax_type=='norm') prob1 = wztools::softmax(evt, temp[t]) else prob1 = wztools::softmax_inverse(evt, temp[t])# probability of choosing bandit 1
       choice[t] = rbinom(1,1, (1-prob1)) +1 # 1-> left; 2->right
       if (choice[t] == 1) reject[t] = 2
@@ -124,12 +124,11 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
 
     #update 2 (after)
     if (choice[t]>-1) {
-      ev_after[t,choice[t]] = ev_after[t,choice[t]] + pe * alpha
-      ev_after[t,reject[t]] = ev_after[t,reject[t]]
+      evt[choice[t]] = evt[choice[t]]+ pe * alpha
     } else {
-      ev_after[t,observation[t]] = ev_after[t,observation[t]] + pe * alpha_obs
-      ev_after[t,abs(observation[t]-3)] = ev_after[t,abs(observation[t]-3)]
+      evt[observation[t]] = evt[observation[t]] + pe * alpha_obs
     }
+    ev_after[t,] = evt
 
   } # t loop
 
