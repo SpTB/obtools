@@ -15,7 +15,7 @@
 #' @param temp temperature parameter (either inverse or not, dependent on the softmax_type argument)
 #' @param p_observe probability of observing any arm
 #' @param p_observeA probability of observing arm 1
-#' @param decay decay of p_observe parameter
+#' @param decay_obs decay of p_observe parameter
 #' @param decay_function 'hyper': hyperbolic; 'exp': exponential
 #' @param growth_function 'hyper': hyperbolic
 #' @param inf_bonus information bonus (not fully implemented)
@@ -27,7 +27,7 @@
 #' @export
 #'
 #' @examples
-delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_sd, ev0 = 0.5, softmax_type = 'norm', alpha, alpha_obs=NULL, temp, p_observe=0, p_observeA=0.5, decay=NULL, decay_function='', growth_function='hyper',inf_bonus=0, decay_inf=0, decay_temp=0, growth_temp=0) {
+delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_sd, ev0 = 0.5, softmax_type = 'norm', alpha, alpha_obs=NULL, temp, p_observe=0, p_observeA=0.5, decay_obs=NULL, decay_bool=F, decay_function='', growth_function='hyper',inf_bonus=0, decay_inf=0, decay_temp=0, growth_temp=0) {
 #decay_funcion: currently can take arguments: 'exp' (exponential), 'hyper' (hyperbolic), 'qhyper' (quasi-hyperbolic)
 
   if(!is.null(seed)) set.seed(seed)
@@ -37,7 +37,7 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
    p_observe = rep(p_observe, trial_num)
    inf_bonus = rep(inf_bonus, trial_num)
    temp      = rep(temp, trial_num)
-   if (!is.null(decay)) {
+   if (decay_bool) {
 
      if (growth_function!='hyper') stop ("Only hyperbolic growth is currently implemented")
 
@@ -46,12 +46,12 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
          stop('Please provide decay_function argument')
        }
        else if (decay_function=='exp') {
-         p_observe[t] = wztools::decay_exp(A0=p_observe[1], k=decay,      t=t-1)
+         p_observe[t] = wztools::decay_exp(A0=p_observe[1], k=decay_obs,      t=t-1)
          inf_bonus[t] = wztools::decay_exp(A0=inf_bonus[1], k=decay_inf,  t=t-1)
          temp     [t] = wztools::decay_exp(A0=temp     [1], k=decay_temp, t=t-1)
        }
        else if (decay_function=='hyper') {
-         p_observe[t] = wztools::decay_hyper (A0=p_observe[1], k=decay,      t=t-1)
+         p_observe[t] = wztools::decay_hyper (A0=p_observe[1], k=decay_obs,      t=t-1)
          inf_bonus[t] = wztools::decay_hyper (A0=inf_bonus[1], k=decay_inf,  t=t-1)
          if (softmax_type=='norm') {
            temp[t] = wztools::growth_hyper(A0=temp[1], k=growth_temp, t=t-1)
@@ -78,8 +78,8 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
                      rnorm(trial_num, pay2, pay2_sd))
   }
 
-  ev = ev_after = matrix(ev0, trial_num, 2)
-
+  ev = matrix(ev0, trial_num, 2, byrow=T) #works both when ev0 length is 1 or 2
+  ev_after = matrix(NaN, trial_num, 2, byrow=T)
 
   for (t in 1:trial_num) {
 

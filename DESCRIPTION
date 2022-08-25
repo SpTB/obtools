@@ -16,3 +16,7 @@ LazyData: true
 Imports: 
     wztools, tibble
 URL: https://github.com/SpTB/obtools
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
