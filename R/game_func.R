@@ -23,7 +23,7 @@
 #' @param decay_temp decay of the temp softmax parameter
 #' @param growth_temp growth of the temp softmax parameter
 #'
-#' @return
+#' @return tibble containing a simulated game with choices, outcomes and expected values
 #' @export
 #'
 #' @examples
@@ -117,7 +117,7 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
       pe = observed_outcomes[t] - ev[t,choice[t]]
     } else {
       choice[t] = reject[t] = -1
-      observation[t] = rbinom(1,1, p_observeA) + 1
+      observation[t] = rbinom(1,1, (1-p_observeA)) + 1
       observed_outcomes[t] = outcomes[t, observation[t]]
       pe = observed_outcomes[t] - ev[t,observation[t]]
     }

@@ -250,3 +250,109 @@ for (s in seq_along(1:nsub)) {
 
 sim2
 ```
+
+## adding variability in ev0
+
+
+```{r}
+#parameters
+#learning (hypers)
+alpha_exp_high = wztools::draw_from_beta_hypers(native_mu=0.6, sigma=0.1, native_range=c(0,1), nsub=nsub)
+alpha_nov_high = wztools::draw_from_beta_hypers(native_mu=0.6, sigma=0.1, native_range=c(0,1), nsub=nsub)
+alpha_choice_high = wztools::draw_from_beta_hypers(native_mu=0.7, sigma=0.1, native_range=c(0,1), nsub=nsub)
+alpha_exp_low = wztools::draw_from_beta_hypers(native_mu=0.25, sigma=0.1, native_range=c(0,1), nsub=nsub)
+alpha_nov_low = wztools::draw_from_beta_hypers(native_mu=0.25, sigma=0.1, native_range=c(0,1), nsub=nsub)
+alpha_choice_low = wztools::draw_from_beta_hypers(native_mu=0.35, sigma=0.1, native_range=c(0,1), nsub=nsub)
+
+## hyper initial expectations (ev0)
+ev0_high = wztools::draw_from_beta_hypers(native_mu=25, sigma=0.1, native_range=c(10,40), nsub=nsub)
+ev0_low  = wztools::draw_from_beta_hypers(native_mu=0, sigma=0.1, native_range=c(-15,15), nsub=nsub)
+ev0_sigma = wztools::draw_from_beta_hypers(native_mu=5, sigma=0.1, native_range=c(0,10), nsub=nsub)
+
+## decision
+tau = wztools::draw_from_beta_hypers(native_mu=0.5, sigma=0.1, native_range=c(0,1), nsub=nsub)
+tau_g = wztools::draw_from_beta_hypers(native_mu=0.03, sigma=0.2, native_range=c(0,0.05), nsub=nsub)
+growth_func = 'hyper'
+
+#observation
+p_observe0_high = wztools::draw_from_beta_hypers(native_mu=0.35, sigma=0.1, native_range=c(0,1), nsub=nsub)
+p_observe0_low  = wztools::draw_from_beta_hypers(native_mu=0.75, sigma=0.1, native_range=c(0,1), nsub=nsub)
+p_observe_k     = wztools::draw_from_beta_hypers(native_mu=0.60, sigma=0.1, native_range=c(0,1), nsub=nsub)
+decay_func = 'hyper'
+
+##task structure
+conds = interaction(rep(reward_cond,nblock/2), rep(exp_cond,each=nblock/2))
+sim3=NULL
+
+for (s in seq_along(1:nsub)) {
+  games=NULL
+  ev_high = ev0_high[s]
+  ev_low  = ev0_low [s]
+  for (g in seq_along(1:nblock)) {
+    if (conds[g]== 'High.Expert') {
+      pay_means = pay_high_means
+      alpha = alpha_choice_high[s]
+      alpha_obs = alpha_exp_high[s]
+      p_observe0 = p_observe0_high[s]
+      ev0 = ev_high
+    } else if (conds[g]== 'High.Novice') {
+      pay_means = pay_high_means
+      alpha = alpha_choice_high[s]
+      alpha_obs = alpha_nov_high[s]
+      p_observe0 = p_observe0_high[s]
+      ev0 = ev_high
+    } else if (conds[g]== 'Low.Expert') {
+      pay_means = pay_low_means
+      alpha = alpha_choice_low[s]
+      alpha_obs = alpha_exp_low[s]
+      p_observe0 = p_observe0_low[s]
+      ev0 = ev_low
+    } else if (conds[g]== 'Low.Novice') {
+      pay_means = pay_low_means
+      alpha = alpha_choice_low[s]
+      alpha_obs = alpha_nov_low[s]
+      p_observe0 = p_observe0_low[s]
+      ev0 = ev_low
+    }
+    
+    ev0[1] = rnorm(1,ev0[1], ev0_sigma)
+    ev0[2] = ev0[1]
+    game = delta_game(
+                   #task structure
+                   type='norm', 
+                   trial_num=ntrial, 
+                   pay1=pay_means[1], 
+                   pay2=pay_means[2], 
+                   pay1_sd=pay_sd, 
+                   pay2_sd= pay_sd,  
+                   #choice params
+                   ev0= ev0, 
+                   softmax_type = 'norm',
+                   alpha = alpha, 
+                   alpha_obs = alpha_obs,
+                   temp = tau[s],
+                   decay_bool=T,
+                   growth_temp = tau_g[s],
+                   growth_function = growth_func,
+                   #observation params
+                   p_observe=p_observe0,
+                   p_observeA = p_observeA,
+                   decay_obs=p_observe_k[s],
+                   decay_function=decay_func
+    )
+   
+    game$reward = substr(as.character(conds[g]),1,2)
+    game$exp = substr(as.character(conds[g]),nchar(as.character(conds[g]))-5,nchar(as.character(conds[g])))
+    game$game = g
+    game$subjID = s
+    
+    if(game$reward[1]=='Hi') ev_high=rep(mean(c(game$ev1_after[ntrial],game$ev2_after[ntrial])),2) #update start-game evs
+    if(game$reward[1]=='Lo') ev_low =rep(mean(c(game$ev1_after[ntrial],game$ev2_after[ntrial])),2)
+    
+    games = bind_rows(games, game) #combine into a single dataframe
+    } #g-loop
+  sim3 = rbind(sim3, games)
+  } #s-loop
+
+sim3
+```
