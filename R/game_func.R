@@ -2,7 +2,7 @@
 #' Simulates a 2-arm bandit game with binary or gaussian payoffs
 #'
 #' @param type 'binom': binary outcome; 'norm': gaussian outcome
-#' @param seed
+#' @param seed seed
 #' @param trial_num number of trials within a game
 #' @param pay1 payoff mean for arm 1
 #' @param pay2 payoff mean for arm 2
@@ -10,6 +10,7 @@
 #' @param pay2_sd payoff sd for arm 2
 #' @param ev0 numeric vector (2) specifying initial value belief (at the start of the game)
 #' @param softmax_type 'norm': with inverse temperature par (higher->more precision) 'inv': with temperature par (higher->less precision)
+#' @param alphas_setup string vector specifying the number of learning rates. Options: 'single', 'obs', 'val' or 'valobs'
 #' @param alpha learning rate for choice trials
 #' @param alpha_obs learning rate for observational trials
 #' @param temp temperature parameter (either inverse or not, dependent on the softmax_type argument)
@@ -27,11 +28,13 @@
 #' @export
 #'
 #' @examples
-delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_sd, ev0 = 0.5, softmax_type = 'norm', alpha, alpha_obs=NULL, temp, p_observe=0, p_observeA=0.5, decay_obs=NULL, decay_bool=F, decay_function='', growth_function='hyper',inf_bonus=0, decay_inf=0, decay_temp=0, growth_temp=0) {
+delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_sd, ev0 = 0.5, softmax_type = 'norm', alphas_setup='single', alpha, alphaM = NULL, alpha_obs=NULL, alpha_obsM=NULL,  temp, p_observe=0, p_observeA=0.5, decay_obs=NULL, decay_bool=F, decay_function='', growth_function='hyper',inf_bonus=0, decay_inf=0, decay_temp=0, growth_temp=0) {
 #decay_funcion: currently can take arguments: 'exp' (exponential), 'hyper' (hyperbolic), 'qhyper' (quasi-hyperbolic)
 
   if(!is.null(seed)) set.seed(seed)
-  if (is.null(alpha_obs)) alpha_obs = alpha #if not specified, set alpha for observation trials (alpha_obs) to the same value as alpha for choices (alpha)
+  if (alphas_setup=='single') alpha_obs = alphaM = alpha_obsM = alpha #single LR
+  if (alphas_setup=='obs') alphaM = alpha; alpha_obsM = alpha_obs # 2 LRs: observe vs choice
+  if (alphas_setup=='val') alpha_obs = alpha; alpha_obsM = alphaM # 2 LRs: pos v neg outcome
 
    choice = reject = observed_outcomes = observation  =rep(-1,trial_num)
    p_observe = rep(p_observe, trial_num)
@@ -86,11 +89,21 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
     #update
     if(t>1) {
       if (choice[t-1]>-1) {
-        ev[t,choice[t-1]] = ev[t-1,choice[t-1]] + pe * alpha
-        ev[t,reject[t-1]] = ev[t-1,reject[t-1]]
+        if (observed_outcomes[t-1]>=0) {
+          ev[t,choice[t-1]] = ev[t-1,choice[t-1]] + pe * alpha
+          ev[t,reject[t-1]] = ev[t-1,reject[t-1]]
+          }else if (observed_outcomes[t-1]<0) {
+            ev[t,choice[t-1]] = ev[t-1,choice[t-1]] + pe * alphaM
+            ev[t,reject[t-1]] = ev[t-1,reject[t-1]]
+          }
       } else {
-        ev[t,observation[t-1]] = ev[t-1,observation[t-1]] + pe * alpha_obs
-        ev[t,abs(observation[t-1]-3)] = ev[t-1,abs(observation[t-1]-3)]
+        if (observed_outcomes[t-1]>=0) {
+          ev[t,observation[t-1]] = ev[t-1,observation[t-1]] + pe * alpha_obs
+          ev[t,abs(observation[t-1]-3)] = ev[t-1,abs(observation[t-1]-3)]
+        } else if (observed_outcomes[t-1]<0) {
+          ev[t,observation[t-1]] = ev[t-1,observation[t-1]] + pe * alpha_obsM
+          ev[t,abs(observation[t-1]-3)] = ev[t-1,abs(observation[t-1]-3)]
+        }
       }
 
     }
@@ -124,9 +137,18 @@ delta_game <- function(type, seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_s
 
     #update 2 (after)
     if (choice[t]>-1) {
-      evt[choice[t]] = evt[choice[t]]+ pe * alpha
+      if (observed_outcomes[t]>=0) {
+        evt[choice[t]] = evt[choice[t]]+ pe * alpha
+      } else if (observed_outcomes[t]<0) {
+        evt[choice[t]] = evt[choice[t]]+ pe * alphaM
+      }
     } else {
-      evt[observation[t]] = evt[observation[t]] + pe * alpha_obs
+      if (observed_outcomes[t]>=0) {
+        evt[observation[t]] = evt[observation[t]] + pe * alpha_obs
+      } else if (observed_outcomes[t]<0) {
+          evt[observation[t]] = evt[observation[t]] + pe * alpha_obsM
+      }
+
     }
     ev_after[t,] = evt
 
@@ -488,3 +510,150 @@ beta_game <- function(trial_num, pay1, pay2,
     trial = 1:trial_num)
 }
 
+#' Simulate a 2-arm bandit game with learning rate linearly modulated by reward conditions
+#'
+#' @param type type of payoff ('norm' <- gaussian, or 'binom'<-binomial)
+#' @param seed
+#' @param trial_num number of trials per game
+#' @param pay1 payoff mean for bandit 1
+#' @param pay2 payoff mean for bandit 2
+#' @param pay1_sd payoff sd for bandit 1
+#' @param pay2_sd payoff sd for bandit 2
+#' @param ev0 starting expected value (can be a single number if both the same, or a vector of 2 numbers if different)
+#' @param softmax_type 'norm' or 'inv'
+#' @param alphaI learning rate intercept
+#' @param b_reward lr beta for reward (high or low)
+#' @param b_obs lr beta for observing vs choosing
+#' @param temp inverse choice temperature parameter
+#' @param p_observe prob of observation
+#' @param p_observeA prob of observing the better arm (A)
+#' @param decay_obs #currently not in use...
+#' @param decay_bool
+#' @param decay_function
+#' @param growth_function
+#' @param inf_bonus
+#' @param decay_inf
+#' @param decay_temp
+#' @param growth_temp
+#'
+#' @return
+#' @export
+#'
+#' @examples
+delta_game2 <- function(type='norm', seed = NULL, trial_num, pay1, pay2, pay1_sd, pay2_sd, ev0, softmax_type = 'norm', alphaI, b_reward=0, b_obs=0,  temp, p_observe=0, p_observeA=0.5, decay_obs=NULL, decay_bool=F, decay_function='', growth_function='hyper',inf_bonus=0, decay_inf=0, decay_temp=0, growth_temp=0) {
+  #decay_funcion: currently can take arguments: 'exp' (exponential), 'hyper' (hyperbolic), 'qhyper' (quasi-hyperbolic)
+
+  if(!is.null(seed)) set.seed(seed)
+
+  choice = reject = observed_outcomes = observation  =rep(-1,trial_num)
+  p_observe = rep(p_observe, trial_num)
+  inf_bonus = rep(inf_bonus, trial_num)
+  temp      = rep(temp, trial_num)
+  if (decay_bool) {
+
+    if (growth_function!='hyper') stop ("Only hyperbolic growth is currently implemented")
+
+    for (t in 1:max(trial_num)) {
+      if (decay_function=='') {
+        stop('Please provide decay_function argument')
+      }
+      else if (decay_function=='exp') {
+        p_observe[t] = wztools::decay_exp(A0=p_observe[1], k=decay_obs,      t=t-1)
+        inf_bonus[t] = wztools::decay_exp(A0=inf_bonus[1], k=decay_inf,  t=t-1)
+        temp     [t] = wztools::decay_exp(A0=temp     [1], k=decay_temp, t=t-1)
+      }
+      else if (decay_function=='hyper') {
+        p_observe[t] = wztools::decay_hyper (A0=p_observe[1], k=decay_obs,      t=t-1)
+        inf_bonus[t] = wztools::decay_hyper (A0=inf_bonus[1], k=decay_inf,  t=t-1)
+        if (softmax_type=='norm') {
+          temp[t] = wztools::growth_hyper(A0=temp[1], k=growth_temp, t=t-1)
+        }
+        else if (softmax_type=='inv') {
+          temp[t] = wztools::decay_hyper(A0=temp [1], k=decay_temp, t=t-1)
+        }
+      }
+      else if (decay_function=='qhyper') {
+        stop('Not implemented yet!')
+      }
+      else {
+        stop('decay_function argument needs to be either "exp", "hyper" or "qhyper"')
+      }
+    }
+  }
+
+  if (type=='binom') {
+    outcomes = cbind(rbinom(trial_num, 1, pay1),
+                     rbinom(trial_num, 1, pay2))
+
+  } else if (type=='norm') {
+    outcomes = cbind(rnorm(trial_num, pay1, pay1_sd),
+                     rnorm(trial_num, pay2, pay2_sd))
+  }
+
+  ev = matrix(ev0, trial_num, 2, byrow=T) #works both when ev0 length is 1 or 2
+  ev_after = matrix(NaN, trial_num, 2, byrow=T)
+
+  for (t in 1:trial_num) {
+
+    #update
+    if(t>1) {
+      exp_term = exp(alphaI + b_reward*(observed_outcomes[t-1]>=0) + b_obs*(choice[t-1]<0))
+      alpha_trial = exp_term / (1+exp_term)
+      if (choice[t-1]>-1) {
+        ev[t,choice[t-1]] = ev[t-1,choice[t-1]] + pe * alpha_trial
+        ev[t,reject[t-1]] = ev[t-1,reject[t-1]]
+      } else {
+        ev[t,observation[t-1]] = ev[t-1,observation[t-1]] + pe * alpha_trial
+        ev[t,abs(observation[t-1]-3)] = ev[t-1,abs(observation[t-1]-3)]
+      }
+    }
+    #choose
+    did_choose = rbinom(1, 1, (1-p_observe[t]))
+    evt = ev[t,]
+    if (did_choose) {
+      # #!!!information bonus stuff not implemented
+      # freqa = sum(c(observation, choice)==1) #how many times up to this point option A was chosen
+      # freqb = sum(c(observation, choice)==2)
+      # if (is.na(freqa)) freqa = 0
+      # if (is.na(freqb)) freqb = 0
+      # inf_diff = freqa-freqb
+      #TODO: potentially, inf bonus can be scaled by the difference in inf
+      #A = -(inf_bonus[t] * inf_diff) #bonus goes to the less chosen option
+      #A = 0
+      #evt[1] = evt[1] + A #adding the inf bonus (minus values substract bonus from evt[1], which is equivalent to adding the bonus for evt[2])
+      if (softmax_type=='norm') prob1 = wztools::softmax(evt, temp[t]) else prob1 = wztools::softmax_inverse(evt, temp[t])# probability of choosing bandit 1
+      choice[t] = rbinom(1,1, (1-prob1)) +1 # 1-> left; 2->right
+      if (choice[t] == 1) reject[t] = 2
+      if (choice[t] == 2) reject[t] = 1
+      #update (delta)
+      observed_outcomes[t] = outcomes[t, choice[t]]
+      pe = observed_outcomes[t] - ev[t,choice[t]]
+    } else {
+      choice[t] = reject[t] = -1
+      observation[t] = rbinom(1,1, (1-p_observeA)) + 1
+      observed_outcomes[t] = outcomes[t, observation[t]]
+      pe = observed_outcomes[t] - ev[t,observation[t]]
+    }
+
+    #update 2 (after)
+    exp_term_after = exp(alphaI + b_reward*(observed_outcomes[t]>=0) + b_obs*(choice[t]<0))
+    alpha_trial_after = exp_term_after/(1+exp_term_after)
+    if (choice[t]>-1) {
+      evt[choice[t]] = evt[choice[t]]+ pe * alpha_trial_after
+    } else {
+      evt[observation[t]] = evt[observation[t]] + pe * alpha_trial_after
+    }
+    ev_after[t,] = evt
+
+  } # t loop
+
+  out = tibble::tibble(
+    ev1 = ev[,1],
+    ev2 = ev[,2],
+    ev1_after = ev_after[,1],
+    ev2_after = ev_after[,2],
+    choice = choice,
+    observation = observation,
+    outcome = observed_outcomes,
+    trial = 1:trial_num)
+}
